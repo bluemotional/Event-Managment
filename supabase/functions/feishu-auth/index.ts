@@ -249,7 +249,9 @@ Deno.serve(async (request) => {
       const snapshot = await getSnapshot()
       const member = findMember(snapshot, profile)
       if (!member) {
-        return json({ error: '你的飞书账号还没有匹配到系统成员。请联系管理员确认：成员资料已同步到云端，并且成员里填写的是邮箱、手机号、open_id 或 user_id 中的一种。' }, 403)
+        return json({
+          error: '你的飞书账号还没有匹配到系统成员。请联系管理员确认：成员资料已同步到云端，并且成员里填写的是邮箱、手机号、open_id 或 user_id 中的一种。',
+        }, 403)
       }
 
       const sessionToken = await signSession({

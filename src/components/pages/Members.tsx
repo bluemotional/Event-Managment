@@ -5,12 +5,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { resolveFeishuMembers, FeishuResolveResult } from '@/lib/feishu-directory'
+import { saveSyncToken, uploadCloudSnapshot } from '@/lib/cloud-sync'
 import { isSupabaseConfigured } from '@/lib/supabase'
 import { canEditActivities, canManageSystem } from '@/lib/access-control'
 import { AlertCircle, Check, Cloud, Pencil, RefreshCw, Trash2, UserPlus, X } from 'lucide-react'
 
 export function Members() {
-  const { members, addMember, updateMember, deleteMember, events, adminMemberIds, eventEditorMemberIds, viewerMode, currentMemberId, setSystemAdmin, setEventEditor } = useAppStore()
+  const { members, addMember, updateMember, deleteMember, events, adminMemberIds, eventEditorMemberIds, viewerMode, currentMemberId, setSystemAdmin, setEventEditor, exportSnapshot } = useAppStore()
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState({ name: '', role: '', feishuId: '', systemAdmin: false, eventEditor: false })
@@ -62,6 +63,7 @@ export function Members() {
     setResolveBusy(true)
     setResolveResult(null)
     try {
+      saveSyncToken(syncToken)
       const response = await resolveFeishuMembers(members, syncToken)
       const found = response.results.filter((item) => item.found && item.feishuOpenId)
       found.forEach((item) => {
@@ -69,10 +71,15 @@ export function Members() {
           feishuOpenId: item.feishuOpenId,
         })
       })
+
+      if (found.length > 0) {
+        await uploadCloudSnapshot(exportSnapshot(), syncToken)
+      }
+
       const missing = response.results.filter((item) => !item.found)
       setResolveResult({
         type: missing.length === 0 ? 'success' : 'error',
-        message: `已绑定 ${found.length} 人${missing.length > 0 ? `，${missing.length} 人未找到` : ''}`,
+        message: `已绑定 ${found.length} 人并同步到云端${missing.length > 0 ? `，${missing.length} 人未找到` : ''}`,
         details: response.results,
       })
     } catch (error) {
