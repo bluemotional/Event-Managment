@@ -7,7 +7,6 @@ export function canManageSystem(
 ): boolean {
   if (viewerMode === 'public') return false
   if (viewerMode === 'console') return true
-  if (adminMemberIds.length === 0) return true
   return adminMemberIds.includes(currentMemberId)
 }
 
@@ -19,7 +18,6 @@ export function canEditActivities(
 ): boolean {
   if (viewerMode === 'public') return false
   if (canManageSystem(adminMemberIds, viewerMode, currentMemberId)) return true
-  if (eventEditorMemberIds.length === 0) return true
   return eventEditorMemberIds.includes(currentMemberId)
 }
 

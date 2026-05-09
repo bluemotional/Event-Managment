@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
+import { getFeishuSessionToken } from '@/lib/feishu-auth'
 
 export const CLOUD_SYNC_TOKEN_STORAGE_KEY = 'qoder-event-sync-token'
 export const CLOUD_SYNC_TOKEN_CHANGED_EVENT = 'qoder-cloud-sync-token-change'
@@ -9,12 +10,22 @@ type SyncResponse = {
   error?: string
 }
 
-function assertReady(syncToken: string) {
+function getCloudAuthHeaders(syncToken?: string): Record<string, string> {
+  const trimmedSyncToken = syncToken?.trim() || getSavedSyncToken().trim()
+  if (trimmedSyncToken) return { 'x-sync-token': trimmedSyncToken }
+
+  const sessionToken = getFeishuSessionToken()
+  if (sessionToken) return { 'x-feishu-session': sessionToken }
+
+  return {}
+}
+
+function assertReady(syncToken?: string) {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error('Supabase 还没有配置，请先设置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY')
   }
-  if (!syncToken.trim()) {
-    throw new Error('请输入云端同步密钥')
+  if (Object.keys(getCloudAuthHeaders(syncToken)).length === 0) {
+    throw new Error('请先使用飞书登录，或输入云端同步密钥')
   }
 }
 
@@ -29,23 +40,27 @@ export function saveSyncToken(syncToken: string) {
   window.dispatchEvent(new Event(CLOUD_SYNC_TOKEN_CHANGED_EVENT))
 }
 
-export async function uploadCloudSnapshot(snapshotJson: string, syncToken: string) {
+export function hasCloudCredentials(): boolean {
+  return Object.keys(getCloudAuthHeaders()).length > 0
+}
+
+export async function uploadCloudSnapshot(snapshotJson: string, syncToken?: string) {
   assertReady(syncToken)
   const payload = JSON.parse(snapshotJson)
   const { data, error } = await supabase!.functions.invoke<SyncResponse>('sync-snapshot', {
     body: { action: 'upload', payload },
-    headers: { 'x-sync-token': syncToken.trim() },
+    headers: getCloudAuthHeaders(syncToken),
   })
   if (error) throw new Error(error.message)
   if (data?.error) throw new Error(data.error)
   return data
 }
 
-export async function downloadCloudSnapshot(syncToken: string) {
+export async function downloadCloudSnapshot(syncToken?: string) {
   assertReady(syncToken)
   const { data, error } = await supabase!.functions.invoke<SyncResponse>('sync-snapshot', {
     body: { action: 'download' },
-    headers: { 'x-sync-token': syncToken.trim() },
+    headers: getCloudAuthHeaders(syncToken),
   })
   if (error) throw new Error(error.message)
   if (data?.error) throw new Error(data.error)

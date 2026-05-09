@@ -36,6 +36,7 @@ QODER_SYNC_TOKEN=自己生成的一段长密钥
 
 ```bash
 supabase functions deploy sync-snapshot
+supabase functions deploy feishu-auth
 supabase functions deploy send-reminders
 supabase functions deploy resolve-feishu-users
 supabase secrets set FEISHU_APP_ID=你的飞书 App ID
@@ -46,6 +47,16 @@ supabase secrets set QODER_SYNC_TOKEN=你的同步密钥
 部署后，系统设置页可以用 `QODER_SYNC_TOKEN` 上传/拉取云端快照。
 
 成员页可以用同一个 `QODER_SYNC_TOKEN` 批量查询飞书通讯录，把成员邮箱或手机号转换成 `open_id`。飞书应用需要开通通讯录读取相关权限，并发布/安装到你的企业组织。
+
+上线给同事使用时，前端会通过 `feishu-auth` 做飞书登录。同事不需要知道 `QODER_SYNC_TOKEN`；飞书登录成功后，系统会用当前云端快照里的成员、系统管理员和活动编辑权限判断他能看什么、能不能保存。
+
+飞书开放平台里需要把 Vercel 生产地址加入登录回调地址，例如：
+
+```text
+https://your-vercel-domain.vercel.app/
+```
+
+回调地址要和浏览器地址的 origin/path 一致，不包含 `#/settings` 这类 hash 路由。
 
 ## 4. 启用云端定时提醒
 

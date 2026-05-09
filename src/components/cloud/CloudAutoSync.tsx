@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { AlertCircle, CheckCircle2, CloudOff, RefreshCw, UploadCloud } from 'lucide-react'
-import { downloadCloudSnapshot, getSavedSyncToken, uploadCloudSnapshot, CLOUD_SYNC_TOKEN_CHANGED_EVENT } from '@/lib/cloud-sync'
+import { downloadCloudSnapshot, hasCloudCredentials, uploadCloudSnapshot, CLOUD_SYNC_TOKEN_CHANGED_EVENT } from '@/lib/cloud-sync'
 import { isSupabaseConfigured } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
+import { canEditActivities } from '@/lib/access-control'
 
 type CloudSyncState = 'disabled' | 'pulling' | 'pending' | 'saving' | 'synced' | 'error'
 
@@ -31,13 +32,9 @@ function getSharedDataFingerprint(state: ReturnType<typeof useAppStore.getState>
   })
 }
 
-function hasSyncToken(): boolean {
-  return Boolean(getSavedSyncToken().trim())
-}
-
 export function CloudAutoSync() {
   const [syncState, setSyncState] = useState<CloudSyncState>(() => {
-    if (!isSupabaseConfigured || !hasSyncToken()) return 'disabled'
+    if (!isSupabaseConfigured || !hasCloudCredentials()) return 'disabled'
     return 'pulling'
   })
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null)
@@ -68,7 +65,7 @@ export function CloudAutoSync() {
     }
 
     const pullCloud = async () => {
-      if (!isSupabaseConfigured || !hasSyncToken()) {
+      if (!isSupabaseConfigured || !hasCloudCredentials()) {
         setSyncState('disabled')
         return
       }
@@ -77,7 +74,7 @@ export function CloudAutoSync() {
       setSyncState('pulling')
       setMessage('')
       try {
-        const raw = await downloadCloudSnapshot(getSavedSyncToken())
+        const raw = await downloadCloudSnapshot()
         const currentFingerprint = getSharedDataFingerprint(useAppStore.getState())
 
         applyingRemoteRef.current = true
@@ -103,13 +100,15 @@ export function CloudAutoSync() {
     }
 
     const scheduleUpload = () => {
-      if (!isSupabaseConfigured || !hasSyncToken()) {
+      if (!isSupabaseConfigured || !hasCloudCredentials()) {
         setSyncState('disabled')
         return
       }
       if (applyingRemoteRef.current) return
+      const state = useAppStore.getState()
+      if (!canEditActivities(state.eventEditorMemberIds, state.adminMemberIds, state.viewerMode, state.currentMemberId)) return
 
-      const fingerprint = getSharedDataFingerprint(useAppStore.getState())
+      const fingerprint = getSharedDataFingerprint(state)
       if (fingerprint === lastSyncedFingerprintRef.current) return
 
       pendingLocalChangeRef.current = true
@@ -121,7 +120,7 @@ export function CloudAutoSync() {
         setSyncState('saving')
         setMessage('')
         try {
-          await uploadCloudSnapshot(useAppStore.getState().exportSnapshot(), getSavedSyncToken())
+          await uploadCloudSnapshot(useAppStore.getState().exportSnapshot())
           markSynced()
         } catch (error) {
           setSyncState('error')

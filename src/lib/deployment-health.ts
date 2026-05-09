@@ -8,6 +8,7 @@ export type FunctionHealth = {
 }
 
 const functions = [
+  { name: 'feishu-auth', label: '飞书登录' },
   { name: 'sync-snapshot', label: '云端快照同步' },
   { name: 'resolve-feishu-users', label: '飞书 open_id 绑定' },
   { name: 'send-reminders', label: '飞书定时提醒' },
