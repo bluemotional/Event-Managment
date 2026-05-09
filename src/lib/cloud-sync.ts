@@ -1,5 +1,8 @@
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
 
+export const CLOUD_SYNC_TOKEN_STORAGE_KEY = 'qoder-event-sync-token'
+export const CLOUD_SYNC_TOKEN_CHANGED_EVENT = 'qoder-cloud-sync-token-change'
+
 type SyncResponse = {
   payload?: unknown
   updated_at?: string
@@ -13,6 +16,17 @@ function assertReady(syncToken: string) {
   if (!syncToken.trim()) {
     throw new Error('请输入云端同步密钥')
   }
+}
+
+export function getSavedSyncToken(): string {
+  if (typeof window === 'undefined') return ''
+  return window.localStorage.getItem(CLOUD_SYNC_TOKEN_STORAGE_KEY) || ''
+}
+
+export function saveSyncToken(syncToken: string) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(CLOUD_SYNC_TOKEN_STORAGE_KEY, syncToken)
+  window.dispatchEvent(new Event(CLOUD_SYNC_TOKEN_CHANGED_EVENT))
 }
 
 export async function uploadCloudSnapshot(snapshotJson: string, syncToken: string) {

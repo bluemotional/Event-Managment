@@ -41,6 +41,10 @@ interface AppSnapshot {
   currentMemberId: string
 }
 
+type ImportSnapshotOptions = {
+  preserveSession?: boolean
+}
+
 function isSnapshot(value: unknown): value is AppSnapshot {
   if (!value || typeof value !== 'object') return false
   const snapshot = value as Partial<AppSnapshot>
@@ -124,7 +128,7 @@ interface AppState {
   // Config actions
   updateFeishuConfig: (config: Partial<FeishuConfig>) => void
   exportSnapshot: () => string
-  importSnapshot: (raw: string) => { success: boolean; error?: string }
+  importSnapshot: (raw: string, options?: ImportSnapshotOptions) => { success: boolean; error?: string }
   resetDemoData: () => void
 }
 
@@ -599,12 +603,21 @@ export const useAppStore = create<AppState>()(
         return JSON.stringify(snapshot, null, 2)
       },
 
-      importSnapshot: (raw) => {
+      importSnapshot: (raw, options) => {
         try {
           const parsed = JSON.parse(raw)
           if (!isSnapshot(parsed)) {
             return { success: false, error: '备份文件结构不正确' }
           }
+
+          const currentState = get()
+          const preserveSession = options?.preserveSession
+          const preservedMemberId = preserveSession && parsed.members.some((member) => member.id === currentState.currentMemberId)
+            ? currentState.currentMemberId
+            : parsed.currentMemberId || parsed.members[0]?.id || ''
+          const preservedEventId = preserveSession && parsed.events.some((event) => event.id === currentState.selectedEventId)
+            ? currentState.selectedEventId
+            : null
 
           set({
             events: parsed.events,
@@ -615,10 +628,10 @@ export const useAppStore = create<AppState>()(
             adminMemberIds: parsed.adminMemberIds || [parsed.currentMemberId || parsed.members[0]?.id || ''].filter(Boolean),
             eventEditorMemberIds: parsed.eventEditorMemberIds || parsed.adminMemberIds || [parsed.currentMemberId || parsed.members[0]?.id || ''].filter(Boolean),
             feishuConfig: parsed.feishuConfig,
-            viewerMode: parsed.viewerMode || 'console',
-            currentMemberId: parsed.currentMemberId || parsed.members[0]?.id || '',
-            selectedEventId: null,
-            currentPage: 'dashboard',
+            viewerMode: preserveSession ? currentState.viewerMode : parsed.viewerMode || 'console',
+            currentMemberId: preservedMemberId,
+            selectedEventId: preservedEventId,
+            currentPage: preserveSession ? currentState.currentPage : 'dashboard',
           })
           return { success: true }
         } catch {

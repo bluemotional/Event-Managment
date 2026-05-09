@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useAppStore } from '@/store'
 import { Sidebar } from './Sidebar'
+import { CloudAutoSync } from '@/components/cloud/CloudAutoSync'
 import { canEditActivities, canManageSystem } from '@/lib/access-control'
 import { Dashboard } from '@/components/pages/Dashboard'
 import { CreateEvent } from '@/components/pages/CreateEvent'
@@ -137,6 +138,7 @@ export function AppLayout() {
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar />
+      <CloudAutoSync />
       <main className="flex-1 ml-64 p-8 overflow-y-auto">
         <div className="max-w-6xl mx-auto animate-fade-in">
           {renderPage()}

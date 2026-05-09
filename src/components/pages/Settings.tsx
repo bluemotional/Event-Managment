@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { getLocalTimeKey, getReminderCandidates } from '@/lib/reminders'
-import { downloadCloudSnapshot, uploadCloudSnapshot } from '@/lib/cloud-sync'
+import { downloadCloudSnapshot, getSavedSyncToken, saveSyncToken, uploadCloudSnapshot } from '@/lib/cloud-sync'
 import { isSupabaseConfigured } from '@/lib/supabase'
 import {
   AlertCircle,
@@ -44,7 +44,7 @@ export function SettingsPage() {
   const [manualNow, setManualNow] = useState(() => new Date().toISOString().slice(0, 16))
   const [importText, setImportText] = useState('')
   const [backupResult, setBackupResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
-  const [syncToken, setSyncToken] = useState('')
+  const [syncToken, setSyncToken] = useState(() => getSavedSyncToken())
   const [cloudBusy, setCloudBusy] = useState<'upload' | 'download' | null>(null)
   const [cloudResult, setCloudResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
@@ -104,6 +104,7 @@ export function SettingsPage() {
     setCloudBusy('upload')
     setCloudResult(null)
     try {
+      saveSyncToken(syncToken)
       await uploadCloudSnapshot(exportSnapshot(), syncToken)
       setCloudResult({ type: 'success', message: '已上传当前数据到 Supabase' })
     } catch (error) {
@@ -117,8 +118,9 @@ export function SettingsPage() {
     setCloudBusy('download')
     setCloudResult(null)
     try {
+      saveSyncToken(syncToken)
       const raw = await downloadCloudSnapshot(syncToken)
-      const result = importSnapshot(raw)
+      const result = importSnapshot(raw, { preserveSession: true })
       if (!result.success) {
         throw new Error(result.error || '云端数据导入失败')
       }
@@ -300,6 +302,7 @@ export function SettingsPage() {
               type="password"
               value={syncToken}
               onChange={(event) => setSyncToken(event.target.value)}
+              onBlur={() => saveSyncToken(syncToken)}
               placeholder="云端同步密钥 QODER_SYNC_TOKEN"
             />
             <Button onClick={handleCloudUpload} disabled={cloudBusy !== null}>
