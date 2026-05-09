@@ -141,10 +141,10 @@ export function DeployCheckPage() {
                   <p className="text-xs text-muted-foreground">本地入口</p>
                   <p className="mt-1 text-sm font-medium text-foreground">5174</p>
                 </div>
-                <div className="rounded-lg bg-card p-4">
-                  <p className="text-xs text-muted-foreground">云端函数</p>
-                  <p className="mt-1 text-sm font-medium text-foreground">{functionHealth ? `${functionReadyCount} / 3` : '待检查'}</p>
-                </div>
+              <div className="rounded-lg bg-card p-4">
+                <p className="text-xs text-muted-foreground">云端函数</p>
+                <p className="mt-1 text-sm font-medium text-foreground">{functionHealth ? `${functionReadyCount} / 4` : '待检查'}</p>
+              </div>
               </div>
             </div>
           </div>
@@ -177,7 +177,7 @@ export function DeployCheckPage() {
             Edge Functions 检查
           </CardTitle>
           <CardDescription>
-            部署 Supabase Functions 后，用同步密钥检查 3 个云端入口是否能响应。
+            部署 Supabase Functions 后，用同步密钥检查 4 个云端入口是否能响应。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -227,7 +227,7 @@ export function DeployCheckPage() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>1. Supabase 建项目，执行 `supabase/schema.sql`。</p>
-            <p>2. 部署 `sync-snapshot`、`resolve-feishu-users`、`send-reminders`。</p>
+            <p>2. 部署 `feishu-auth`、`sync-snapshot`、`resolve-feishu-users`、`send-reminders`。</p>
             <p>3. 在 Vercel 只配置 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY`。</p>
           </CardContent>
         </Card>

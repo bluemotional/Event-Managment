@@ -165,16 +165,34 @@ async function getSnapshot(): Promise<AppSnapshot> {
 
 function findMember(snapshot: AppSnapshot, profile: FeishuProfile): SnapshotMember | undefined {
   const members = snapshot.members || []
+  const profileOpenId = profile.open_id?.trim()
+  const profileUserId = profile.user_id?.trim()
   const profileEmail = profile.email?.toLowerCase()
   const profileMobile = profile.mobile?.replace(/\D/g, '')
 
   return members.find((member) => {
-    const memberEmail = member.email?.toLowerCase() || member.feishuId?.toLowerCase()
-    const memberPhone = member.feishuId?.replace(/\D/g, '')
+    const memberOpenId = member.feishuOpenId?.trim()
+    const memberUserId = member.feishuUserId?.trim()
+    const memberFeishuId = member.feishuId?.trim()
+    const memberEmail = member.email?.toLowerCase()
+    const memberFeishuIdLower = memberFeishuId?.toLowerCase()
+    const memberPhone = memberFeishuId?.replace(/\D/g, '')
+
     return (
-      Boolean(profile.open_id && member.feishuOpenId === profile.open_id) ||
-      Boolean(profile.user_id && member.feishuUserId === profile.user_id) ||
-      Boolean(profileEmail && memberEmail === profileEmail) ||
+      Boolean(profileOpenId && (
+        memberOpenId === profileOpenId ||
+        memberUserId === profileOpenId ||
+        memberFeishuId === profileOpenId
+      )) ||
+      Boolean(profileUserId && (
+        memberUserId === profileUserId ||
+        memberOpenId === profileUserId ||
+        memberFeishuId === profileUserId
+      )) ||
+      Boolean(profileEmail && (
+        memberEmail === profileEmail ||
+        memberFeishuIdLower === profileEmail
+      )) ||
       Boolean(profileMobile && memberPhone === profileMobile)
     )
   })
@@ -231,7 +249,7 @@ Deno.serve(async (request) => {
       const snapshot = await getSnapshot()
       const member = findMember(snapshot, profile)
       if (!member) {
-        return json({ error: '你的飞书账号还没有加入活动系统成员，请联系管理员添加成员并绑定邮箱/手机号/open_id' }, 403)
+        return json({ error: '你的飞书账号还没有匹配到系统成员。请联系管理员确认：成员资料已同步到云端，并且成员里填写的是邮箱、手机号、open_id 或 user_id 中的一种。' }, 403)
       }
 
       const sessionToken = await signSession({

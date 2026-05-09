@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { getLocalTimeKey, getReminderCandidates } from '@/lib/reminders'
-import { downloadCloudSnapshot, getSavedSyncToken, saveSyncToken, uploadCloudSnapshot } from '@/lib/cloud-sync'
+import { downloadCloudSnapshot, getSavedSyncToken, saveSyncToken, sendManualReminders, uploadCloudSnapshot } from '@/lib/cloud-sync'
 import { isSupabaseConfigured } from '@/lib/supabase'
 import {
   AlertCircle,
@@ -16,6 +16,7 @@ import {
   Cloud,
   DatabaseBackup,
   Download,
+  MessageSquareShare,
   RefreshCw,
   Settings2,
   Upload,
@@ -47,6 +48,8 @@ export function SettingsPage() {
   const [syncToken, setSyncToken] = useState(() => getSavedSyncToken())
   const [cloudBusy, setCloudBusy] = useState<'upload' | 'download' | null>(null)
   const [cloudResult, setCloudResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [manualReminderBusy, setManualReminderBusy] = useState(false)
+  const [manualReminderResult, setManualReminderResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   const previewCandidates = useMemo(() => {
     const now = manualNow ? new Date(manualNow) : new Date()
@@ -130,6 +133,25 @@ export function SettingsPage() {
       setCloudResult({ type: 'error', message: error instanceof Error ? error.message : '云端拉取失败' })
     } finally {
       setCloudBusy(null)
+    }
+  }
+
+  const handleSendManualReminder = async () => {
+    setManualReminderBusy(true)
+    setManualReminderResult(null)
+    try {
+      saveSyncToken(syncToken)
+      const result = (await sendManualReminders({ syncToken, now: manualNow })) || {}
+      const errors = result.errors?.length ? `，${result.errors.length} 条发送失败` : ''
+      const skippedText = result.skipped === 'no_due_or_overdue_tasks' ? '这个时间点没有可发送的到期/逾期任务' : ''
+      setManualReminderResult({
+        type: 'success',
+        message: skippedText || `测试提醒已触发：命中 ${result.candidates || 0} 条，成功发送 ${result.sent || 0} 条${errors}`,
+      })
+    } catch (error) {
+      setManualReminderResult({ type: 'error', message: error instanceof Error ? error.message : '测试提醒发送失败' })
+    } finally {
+      setManualReminderBusy(false)
     }
   }
 
@@ -244,6 +266,23 @@ export function SettingsPage() {
               当前检查时间：{manualNow ? getLocalTimeKey(new Date(manualNow)) : '--:--'}
             </div>
           </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={handleSendManualReminder} disabled={manualReminderBusy || !isSupabaseConfigured}>
+              <MessageSquareShare className="w-4 h-4 mr-2" />
+              {manualReminderBusy ? '发送中' : '发送测试提醒'}
+            </Button>
+            <p className="text-sm text-muted-foreground">
+              会调用 `send-reminders`，按当前时间向命中的到期/逾期任务负责人发真实飞书消息。
+            </p>
+          </div>
+
+          {manualReminderResult && (
+            <div className={`flex items-center gap-2 text-sm ${manualReminderResult.type === 'success' ? 'text-success' : 'text-urgent'}`}>
+              {manualReminderResult.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+              {manualReminderResult.message}
+            </div>
+          )}
 
           {previewCandidates.length === 0 ? (
             <div className="flex items-center gap-2 rounded-lg bg-secondary/50 p-4 text-sm text-muted-foreground">

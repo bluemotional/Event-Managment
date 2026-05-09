@@ -2,7 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-sync-token',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-sync-token, x-feishu-session',
 }
 
 type ReminderPolicy = {
@@ -38,6 +38,7 @@ type SnapshotEvent = {
 type AppSnapshot = {
   events?: SnapshotEvent[]
   members?: SnapshotMember[]
+  adminMemberIds?: string[]
   feishuConfig?: {
     enabled?: boolean
     reminderPolicy?: ReminderPolicy
@@ -60,8 +61,60 @@ const defaultPolicy: ReminderPolicy = {
   timezone: 'Asia/Shanghai',
 }
 
+type SessionPayload = {
+  memberId: string
+  exp: number
+}
+
 function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: corsHeaders })
+}
+
+function textEncoder() {
+  return new TextEncoder()
+}
+
+function base64UrlEncode(value: Uint8Array | string): string {
+  const bytes = typeof value === 'string' ? textEncoder().encode(value) : value
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+function base64UrlDecode(value: string): string {
+  const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4)
+  return atob(padded)
+}
+
+async function hmac(input: string, secret: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    textEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const signature = await crypto.subtle.sign('HMAC', key, textEncoder().encode(input))
+  return base64UrlEncode(new Uint8Array(signature))
+}
+
+async function verifySession(token: string): Promise<SessionPayload> {
+  const secret = Deno.env.get('QODER_SYNC_TOKEN')
+  if (!secret) throw new Error('Missing QODER_SYNC_TOKEN')
+  const [header, body, signature] = token.split('.')
+  if (!header || !body || !signature) throw new Error('Invalid Feishu session')
+  const expected = await hmac(`${header}.${body}`, secret)
+  if (signature !== expected) throw new Error('Invalid Feishu session')
+
+  const payload = JSON.parse(base64UrlDecode(body)) as SessionPayload
+  if (!payload.memberId || payload.exp < Math.floor(Date.now() / 1000)) {
+    throw new Error('Feishu session expired')
+  }
+  return payload
+}
+
+function canManage(snapshot: AppSnapshot, memberId: string): boolean {
+  return (snapshot.adminMemberIds || []).includes(memberId)
 }
 
 function formatInZone(date: Date, timezone: string): { date: string; time: string } {
@@ -186,13 +239,6 @@ Deno.serve(async (request) => {
     }
 
     const manual = body?.action === 'manual'
-    if (manual) {
-      const expectedToken = Deno.env.get('QODER_SYNC_TOKEN')
-      const providedToken = request.headers.get('x-sync-token')
-      if (!expectedToken || providedToken !== expectedToken) {
-        return json({ error: 'Invalid sync token' }, 401)
-      }
-    }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -207,8 +253,30 @@ Deno.serve(async (request) => {
     if (!snapshotRow?.payload) return json({ sent: 0, skipped: 'no_snapshot' })
 
     const snapshot = snapshotRow.payload as AppSnapshot
+    if (manual) {
+      const expectedToken = Deno.env.get('QODER_SYNC_TOKEN')
+      const providedToken = request.headers.get('x-sync-token')
+      if (!expectedToken) {
+        return json({ error: 'Missing QODER_SYNC_TOKEN' }, 500)
+      }
+      if (providedToken !== expectedToken) {
+        const feishuSession = request.headers.get('x-feishu-session')
+        if (!feishuSession) {
+          return json({ error: 'Invalid sync token or Feishu session' }, 401)
+        }
+        const session = await verifySession(feishuSession)
+        if (!canManage(snapshot, session.memberId)) {
+          return json({ error: '当前飞书账号没有系统管理权限，不能触发测试提醒' }, 403)
+        }
+      }
+    }
+
+    const now = manual && typeof body?.now === 'string' ? new Date(body.now) : new Date()
+    if (Number.isNaN(now.getTime())) {
+      return json({ error: 'Invalid manual reminder time' }, 400)
+    }
     const policy = snapshot.feishuConfig?.reminderPolicy || defaultPolicy
-    const candidates = collectCandidates(snapshot, policy, new Date(), manual)
+    const candidates = collectCandidates(snapshot, policy, now, manual)
     if (candidates.length === 0) {
       return json({ sent: 0, candidates: 0, skipped: manual ? 'no_due_or_overdue_tasks' : 'no_scheduled_tasks_now' })
     }
